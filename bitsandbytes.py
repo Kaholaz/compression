@@ -35,6 +35,11 @@ class BinInt:
     def hex(self) -> str:
         return hex(int(self))[2:]
 
+    def __copy__(self):
+        out = BinInt()
+        out.bits = self.bits.copy()
+        return out
+
     def __tuple__(self):
         return tuple(self.bits)
 

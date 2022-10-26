@@ -1,13 +1,15 @@
-from collections import Counter, defaultdict, deque
-from dataclasses import dataclass
+from collections import Counter, deque
+from copy import copy
 from typing import Iterator, Optional
+
+from dataclasses import dataclass
 
 from bitsandbytes import BinInt, Bits
 
 
 @dataclass
 class HuffingTreeNode:
-    letter: Optional[str]
+    letter: Optional[int]
     frequency: Optional[int]
 
     left: Optional["HuffingTreeNode"]
@@ -28,7 +30,7 @@ class HuffingTreeNode:
     def __le__(self, other: "HuffingTreeNode"):
         return not self > other
 
-    def add_encoding(self, value: "BinInt", letter: str):
+    def add_encoding(self, value: "BinInt", letter: int):
         current = self
         for choice in tuple(value):
             if choice:
@@ -41,8 +43,56 @@ class HuffingTreeNode:
                 current = current.left
         current.letter = letter
 
+    def canonicalized_encodings(self) -> tuple[dict[int, BinInt], list[int]]:
+        sorted_encodings = sorted(self.encodings.items(), key=lambda item: len(item[1]))
+
+        encodings = {}
+
+        first_char, first_encoding = sorted_encodings[0]
+        code = BinInt(None, len(first_encoding))
+        encodings[first_char] = copy(code)
+
+        lengths: list[int] = [0 for _ in range(len(code))]
+        lengths[-1] = 1
+        for char, encoding in sorted_encodings[1:]:
+            code.inc()
+            while len(encoding) > len(code):
+                lengths.append(0)
+                code.leftshift()
+            encodings[char] = copy(code)
+            lengths[-1] += 1
+
+        return encodings, lengths
+
+    @property
+    def encodings(self) -> dict[str, BinInt]:
+        def inner(root: HuffingTreeNode, code: BinInt) -> Iterator[tuple[str, BinInt]]:
+            if root.letter is not None:
+                encoding = BinInt(int(code), len(code))
+                code.rightshift()
+                yield root.letter, encoding
+            else:
+                code.leftshift()
+                for char, encoding in inner(root.left, code):
+                    yield char, encoding
+
+                code.leftshift()
+                code.inc()
+                for char, encoding in inner(root.right, code):
+                    yield char, encoding
+                code.rightshift()
+
+        return {char: encoding for char, encoding in inner(self, BinInt())}
+
     @classmethod
-    def create_huffing_tree(cls, s: str) -> "HuffingTreeNode":
+    def from_encodings(cls, encodings: dict[int, BinInt]) -> "HuffingTreeNode":
+        tree = HuffingTreeNode(None, None, None, None)
+        for char, encoding in encodings.items():
+            tree.add_encoding(encoding, char)
+        return tree
+
+    @classmethod
+    def create_huffing_tree(cls, s: bytearray) -> "HuffingTreeNode":
         heap = HuffingTreeHeap(
             [
                 HuffingTreeNode(key, value, None, None)
@@ -112,61 +162,32 @@ class HuffingTreeHeap:
         return len(self.heap)
 
 
-def get_encodings(
-    root: HuffingTreeNode, code: BinInt
-) -> Iterator[tuple[str, tuple[bool]]]:
-    if root.letter is not None:
-        encoding = tuple(code)
-        code.rightshift()
-        yield root.letter, encoding
-    else:
-        code.leftshift()
-        for char, encoding in get_encodings(root.left, code):
-            yield char, encoding
+def encode(string: str | bytearray) -> bytearray:
+    if isinstance(string, str):
+        string = bytearray(string, "utf-8")
+    string: bytearray
 
-        code.leftshift()
-        code.inc()
-        for char, encoding in get_encodings(root.right, code):
-            yield char, encoding
-        code.rightshift()
-
-
-def encode(string: str) -> bytearray:
-    tree = HuffingTreeNode.create_huffing_tree(string)
-
-    encodings = {char: encoding for char, encoding in get_encodings(tree, BinInt())}
-
-    lengths: defaultdict[int, int] = defaultdict(lambda: 0)
-    sorted_encodings = sorted(encodings.items(), key=lambda item: len(item[1]))
-    char, encoding = sorted_encodings[0]
-    code = BinInt(None, len(encoding))
-
-    encodings[char] = tuple(code)
-    lengths[len(code)] += 1
-    for char, encoding in sorted_encodings[1:]:
-        code.inc()
-        while len(encoding) > len(code):
-            code.leftshift()
-        encodings[char] = tuple(code)
-        lengths[len(code)] += 1
+    sorted_encodings, lengths = HuffingTreeNode.create_huffing_tree(
+        string
+    ).canonicalized_encodings()
 
     out = Bits()
-    for i in range(1, len(code) + 1):
-        if lengths[i] >= (1 << 4):
+    for length in lengths:
+        if length >= (1 << 4):
             raise ValueError(
                 "Not enough bits to represent the length of the huffman code"
             )
-        out.append_binint(BinInt(lengths[i], 4))
+        out.append_binint(BinInt(length, 4))
         int(out.bytes[-1])
     out.fill_bit()
     out.append_binint(BinInt(255))
 
-    letters = "".join(char for char, _ in sorted_encodings)
-    for letter in bytearray(letters, "utf-8"):
+    letters = bytearray(char for char, _ in sorted_encodings.items())
+    for letter in letters:
         out.append_binint(BinInt(letter, 8))
 
     for char in string:
-        encoding = encodings[char]
+        encoding = sorted_encodings[char]
         for bit in encoding:
             out.append_bit(bit)
 
@@ -174,7 +195,6 @@ def encode(string: str) -> bytearray:
 
 
 def decode(string: bytearray):
-
     counts: deque[int] = deque()
     i = 0
     for i, byte in enumerate(string):
@@ -184,9 +204,9 @@ def decode(string: bytearray):
         for nibble in nibbles:
             counts.append(nibble)
 
-    tree = HuffingTreeNode(None, None, None, None)
     code = BinInt(0, 1)
 
+    encodings = dict()
     letter_index = i + 1
     while len(counts):
         if not counts[0]:
@@ -194,13 +214,13 @@ def decode(string: bytearray):
             counts.popleft()
             continue
 
-        tree.add_encoding(code, chr(string[letter_index]))
+        encodings[string[letter_index]] = copy(code)
         letter_index += 1
         counts[0] -= 1
         code.inc()
+    tree = HuffingTreeNode.from_encodings(encodings)
 
     bits = Bits.from_byte_array(string[letter_index:])
-
     letters = []
     current = tree
     for bit in bits:
@@ -210,7 +230,7 @@ def decode(string: bytearray):
             current = current.left
 
         if current.letter is not None:
-            letters.append(current.letter)
+            letters.append(chr(current.letter))
             current = tree
 
     return "".join(letters)
