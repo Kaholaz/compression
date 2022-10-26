@@ -33,17 +33,24 @@ class HuffingTreeNode:
         for choice in tuple(value):
             if choice:
                 if current.right is None:
-                    current.right = self.__class__(None, None, None, None)
+                    current.right = HuffingTreeNode(None, None, None, None)
                 current = current.right
             else:
                 if current.left is None:
-                    current.left = self.__class__(None, None, None, None)
+                    current.left = HuffingTreeNode(None, None, None, None)
                 current = current.left
         current.letter = letter
 
     @classmethod
     def create_huffing_tree(cls, s: str) -> "HuffingTreeNode":
-        heap = HuffingTreeHeap([HuffingTreeNode(key, value, None, None) for key, value in Counter(s).items()])
+        heap = HuffingTreeHeap(
+            [
+                HuffingTreeNode(key, value, None, None)
+                for key, value in Counter(s).items()
+            ]
+        )
+
+        root = cls(None, None, None, None)
 
         while len(heap) > 1:
             left = heap.pop_head()
@@ -53,6 +60,7 @@ class HuffingTreeNode:
             heap.insert(root)
 
         return root
+
 
 class HuffingTreeHeap:
     heap = list[HuffingTreeNode]
@@ -74,16 +82,15 @@ class HuffingTreeHeap:
             parent = (child - 1) // 2
 
     def fix_down(self, i: int):
-        while (min := i * 2 + 1) < len(self):
-            if (right := min + 1) < len(self) and self.heap[min] > self.heap[right]:
-                min = right
+        while (_min := i * 2 + 1) < len(self):
+            if (right := _min + 1) < len(self) and self.heap[_min] > self.heap[right]:
+                _min = right
 
-            if self.heap[min] < self.heap[i]:
-                self.heap[min], self.heap[i] = self.heap[i], self.heap[min]
-                i = min            
+            if self.heap[_min] < self.heap[i]:
+                self.heap[_min], self.heap[i] = self.heap[i], self.heap[_min]
+                i = _min
             else:
                 break
-
 
     def insert(self, item: HuffingTreeNode):
         i = len(self)
@@ -105,7 +112,9 @@ class HuffingTreeHeap:
         return len(self.heap)
 
 
-def get_encodings(root: HuffingTreeNode, code: BinInt) -> Iterator[tuple[str, tuple[bool]]]:
+def get_encodings(
+    root: HuffingTreeNode, code: BinInt
+) -> Iterator[tuple[str, tuple[bool]]]:
     if root.letter is not None:
         encoding = tuple(code)
         code.rightshift()
@@ -122,7 +131,7 @@ def get_encodings(root: HuffingTreeNode, code: BinInt) -> Iterator[tuple[str, tu
         code.rightshift()
 
 
-def encode(string: str) -> tuple[str, Bits]:
+def encode(string: str) -> bytearray:
     tree = HuffingTreeNode.create_huffing_tree(string)
 
     encodings = {char: encoding for char, encoding in get_encodings(tree, BinInt())}
@@ -144,15 +153,17 @@ def encode(string: str) -> tuple[str, Bits]:
     out = Bits()
     for i in range(1, len(code) + 1):
         if lengths[i] >= (1 << 4):
-            raise ValueError("Not enough bits to represent the length of the huffman code")
+            raise ValueError(
+                "Not enough bits to represent the length of the huffman code"
+            )
         out.append_binint(BinInt(lengths[i], 4))
+        int(out.bytes[-1])
     out.fill_bit()
     out.append_binint(BinInt(255))
-    
+
     letters = "".join(char for char, _ in sorted_encodings)
     for letter in bytearray(letters, "utf-8"):
-        out.bytes.append(int(letter))
-    print(out.to_byte_array())
+        out.append_binint(BinInt(letter, 8))
 
     for char in string:
         encoding = encodings[char]
@@ -165,13 +176,14 @@ def encode(string: str) -> tuple[str, Bits]:
 def decode(string: bytearray):
 
     counts: deque[int] = deque()
+    i = 0
     for i, byte in enumerate(string):
         if byte == 255:
             break
         nibbles = [byte >> 4, byte & 15]
         for nibble in nibbles:
             counts.append(nibble)
-    
+
     tree = HuffingTreeNode(None, None, None, None)
     code = BinInt(0, 1)
 
@@ -182,15 +194,13 @@ def decode(string: bytearray):
             counts.popleft()
             continue
 
-        tree.add_encoding(tuple(code), chr(string[letter_index]))
+        tree.add_encoding(code, chr(string[letter_index]))
         letter_index += 1
         counts[0] -= 1
         code.inc()
-    
-    
-    bits = Bits(string[letter_index:])
 
-    
+    bits = Bits.from_byte_array(string[letter_index:])
+
     letters = []
     current = tree
     for bit in bits:
@@ -198,11 +208,11 @@ def decode(string: bytearray):
             current = current.right
         else:
             current = current.left
-        
+
         if current.letter is not None:
             letters.append(current.letter)
             current = tree
-    
+
     return "".join(letters)
 
 
