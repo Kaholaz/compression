@@ -20,13 +20,14 @@ class BinInt:
                 raise ValueError(
                     "A greater bit size is needed to represent this negative number"
                 )
+            ~self
+            self.inc()
 
-    def leftshift(self):
-        self.bits.append(False)
+    def leftshiftonce(self):
+        self << 1
 
-    def rightshift(self):
-        if len(self):
-            self.bits.pop()
+    def rightshiftonce(self):
+        self >> 1
 
     def inc(self, signed: bool = False):
         incremented = False
@@ -67,6 +68,19 @@ class BinInt:
             total += factor * self.bits[i]
         return total
 
+    def __lshift__(self, other: int):
+        for _ in range(other):
+            self.bits.append(False)
+        return self
+
+    def __rshift__(self, other: int):
+        for _ in range(other):
+            if not len(self):
+                break
+            self.bits.pop()
+
+        return self
+
     def __invert__(self):
         self.bits = deque(map(lambda b: not b, self.bits))
 
@@ -81,16 +95,20 @@ class BinInt:
         return f"{self.__class__.__name__}(value={self.to_int()}, length={len(self)})"
 
     @classmethod
-    def from_tuple(cls, t: tuple[bool]):
+    def from_tuple(cls, t: tuple[bool]) -> "BinInt":
         result = cls(0)
         result.bits = deque(t)
+
+        return result
 
 
 class Bits:
     bytes: list[BinInt]
     bit_pointer: int
 
-    def __init__(self, binints: Optional[Iterator[BinInt]] = None, bit_pointer: int = 8):
+    def __init__(
+        self, binints: Optional[Iterator[BinInt]] = None, bit_pointer: int = 8
+    ):
         if binints is None:
             binints = list()
         self.bytes = list(binints)
@@ -113,7 +131,7 @@ class Bits:
         for bit in binint:
             self.append_bit(bit)
 
-    def fill_bit(self):
+    def fill_byte(self):
         while self.bit_pointer != 8:
             self.append_bit(False)
 
@@ -132,3 +150,7 @@ class Bits:
         for byte in self.bytes:
             for bit_pointer in range(8):
                 yield byte.bits[bit_pointer]
+
+
+def get_mask(bit: int) -> int:
+    return 1 << (7 - bit)

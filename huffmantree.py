@@ -45,7 +45,7 @@ class HuffingTreeNode:
             code.inc()
             while len(encoding) > len(code):
                 lengths.append(0)
-                code.leftshift()
+                code.leftshiftonce()
             encodings[char] = copy(code)
             lengths[-1] += 1
 
@@ -56,18 +56,18 @@ class HuffingTreeNode:
         def inner(root: HuffingTreeNode, code: BinInt) -> Iterator[tuple[str, BinInt]]:
             if root.letter is not None:
                 encoding = BinInt(code.to_int(), len(code))
-                code.rightshift()
+                code.rightshiftonce()
                 yield root.letter, encoding
             else:
-                code.leftshift()
+                code.leftshiftonce()
                 for char, encoding in inner(root.left, code):
                     yield char, encoding
 
-                code.leftshift()
+                code.leftshiftonce()
                 code.inc()
                 for char, encoding in inner(root.right, code):
                     yield char, encoding
-                code.rightshift()
+                code.rightshiftonce()
 
         return {char: encoding for char, encoding in inner(self, BinInt())}
 

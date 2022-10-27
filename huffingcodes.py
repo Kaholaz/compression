@@ -1,11 +1,11 @@
 from collections import deque
 from copy import copy
 
-from bitsandbytes import BinInt, Bits
+from bitsandbytes import BinInt, Bits, get_mask
 from huffmantree import HuffingTreeNode
 
 
-def encode(string: bytearray | str) -> bytearray:
+def huffing_encode(string: bytearray | str) -> bytearray:
     if isinstance(string, str):
         string = bytearray(string, "utf-8")
 
@@ -13,17 +13,14 @@ def encode(string: bytearray | str) -> bytearray:
         string
     ).canonicalized_encodings()
 
+    max_bin_length = len(bin(max(lengths) + 1)) - 2
     out = Bits()
+    out.append_binint(BinInt(max_bin_length, 3))
     for length in lengths:
-        if length >= (1 << 4):
-            raise ValueError(
-                "Not enough bits to represent the length of the huffman code"
-            )
-        out.append_binint(BinInt(length, 4))
-        out.bytes[-1].to_int()
-    out.fill_bit()
-    out.append_binint(BinInt(255))
+        out.append_binint(BinInt(length, max_bin_length))
+    out.append_binint(BinInt((1 << max_bin_length) - 1, max_bin_length))
 
+    out.fill_byte()
     letters = bytearray(char for char, _ in sorted_encodings.items())
     for letter in letters:
         out.append_binint(BinInt(letter, 8))
@@ -36,23 +33,42 @@ def encode(string: bytearray | str) -> bytearray:
     return out.to_byte_array()
 
 
-def decode(string: bytearray):
+def huffing_decode(string: bytearray) -> bytearray:
     counts: deque[int] = deque()
-    i = 0
-    for i, byte in enumerate(string):
-        if byte == 255:
-            break
-        nibbles = [byte >> 4, byte & 15]
-        for nibble in nibbles:
-            counts.append(nibble)
 
+    bits = map(
+        bool,
+        (string[0] & get_mask(0), string[0] & get_mask(1), string[0] & get_mask(2)),
+    )
+    max_bin_length = BinInt.from_tuple(tuple(bits)).to_int()
+    max_count = (1 << max_bin_length) - 1
+
+    byte = 0
+    bit = 3
+    while True:
+        bits = list()
+        for _ in range(max_bin_length):
+            bits.append(int(string[byte]) & get_mask(bit))
+            bit += 1
+            if bit >= 8:
+                bit = 0
+                byte += 1
+
+        count = BinInt.from_tuple(tuple(map(bool, bits))).to_int()
+        if count >= max_count:
+            break
+
+        counts.append(count)
+
+    if bit == 0:
+        byte -= 1
     code = BinInt(0, 1)
 
     encodings = dict()
-    letter_index = i + 1
+    letter_index = byte + 1
     while len(counts):
         if not counts[0]:
-            code.leftshift()
+            code.leftshiftonce()
             counts.popleft()
             continue
 
@@ -60,10 +76,11 @@ def decode(string: bytearray):
         letter_index += 1
         counts[0] -= 1
         code.inc()
+
     tree = HuffingTreeNode.from_encodings(encodings)
 
     bits = Bits.from_byte_array(string[letter_index:])
-    letters = []
+    letters = bytearray()
     current = tree
     for bit in bits:
         if bit:
@@ -72,11 +89,12 @@ def decode(string: bytearray):
             current = current.left
 
         if current.letter is not None:
-            letters.append(chr(current.letter))
+            letters.append(current.letter)
             current = tree
 
-    return "".join(letters)
+    return letters
 
 
-print(encoded := encode("vennelige pennevenner"))
-print(decoded := decode(encoded))
+if __name__ == "__main__":
+    print(encoded := huffing_encode("vennelige pennevenner"))
+    print(decoded := huffing_decode(encoded))
