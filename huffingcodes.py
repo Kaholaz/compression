@@ -5,7 +5,7 @@ from bitsandbytes import BinInt, Bits
 from huffmantree import HuffingTreeNode
 
 
-def encode(string: bytearray) -> bytearray:
+def encode(string: bytearray | str) -> bytearray:
     if isinstance(string, str):
         string = bytearray(string, "utf-8")
 
@@ -20,7 +20,7 @@ def encode(string: bytearray) -> bytearray:
                 "Not enough bits to represent the length of the huffman code"
             )
         out.append_binint(BinInt(length, 4))
-        int(out.bytes[-1])
+        out.bytes[-1].to_int()
     out.fill_bit()
     out.append_binint(BinInt(255))
 

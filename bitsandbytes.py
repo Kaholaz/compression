@@ -5,13 +5,21 @@ from typing import Iterator, Optional
 class BinInt:
     bits: deque[bool | int]
 
-    def __init__(self, value: Optional[int] = None, length=0):
+    def __init__(self, value: Optional[int] = None, length=-1):
         self.bits = deque()
         if value is not None:
-            for bit in bin(value)[2:]:
+            bit_string = bin(abs(value))[2:]
+            for bit in bit_string:
                 self.bits.append(int(bit))
+
         while len(self) < length:
             self.bits.appendleft(False)
+
+        if value is not None and value < 0:
+            if self.bits[0]:
+                raise ValueError(
+                    "A greater bit size is needed to represent this negative number"
+                )
 
     def leftshift(self):
         self.bits.append(False)
@@ -20,7 +28,7 @@ class BinInt:
         if len(self):
             self.bits.pop()
 
-    def inc(self):
+    def inc(self, signed: bool = False):
         incremented = False
         i = len(self) - 1
 
@@ -29,11 +37,11 @@ class BinInt:
             self.bits[i] = incremented
             i -= 1
 
-        if not incremented:
+        if not incremented and not signed:
             self.bits.appendleft(True)
 
     def hex(self) -> str:
-        return hex(int(self))[2:]
+        return hex(self.to_int())[2:]
 
     def __copy__(self):
         out = BinInt()
@@ -43,13 +51,24 @@ class BinInt:
     def __tuple__(self):
         return tuple(self.bits)
 
-    def __int__(self):
-        total = 0
-        factor = 1
-        for bit in reversed(self.bits):
-            total += factor * bit
-            factor *= 2
+    def to_int(self, signed: bool = False):
+        if len(self) == 0:
+            return 0
+        if len(self) == 1:
+            return self.bits[0]
+
+        factor = 2 << len(self) - 2
+
+        i = 0
+        total = factor * self.bits[0] if not signed else -factor * self.bits[0]
+        while factor > 1:
+            i += 1
+            factor >>= 1
+            total += factor * self.bits[i]
         return total
+
+    def __invert__(self):
+        self.bits = deque(map(lambda b: not b, self.bits))
 
     def __len__(self):
         return len(self.bits)
@@ -59,7 +78,7 @@ class BinInt:
             yield bit
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(value={int(self)}, length={len(self)})"
+        return f"{self.__class__.__name__}(value={self.to_int()}, length={len(self)})"
 
     @classmethod
     def from_tuple(cls, t: tuple[bool]):
@@ -71,10 +90,10 @@ class Bits:
     bytes: list[BinInt]
     bit_pointer: int
 
-    def __init__(self, binints: list[BinInt] = None, bit_pointer: int = 8):
+    def __init__(self, binints: Optional[Iterator[BinInt]] = None, bit_pointer: int = 8):
         if binints is None:
             binints = list()
-        self.bytes = binints[:]
+        self.bytes = list(binints)
         self.bit_pointer = bit_pointer
 
     def append_bits(self, bits: "Bits"):
@@ -99,11 +118,11 @@ class Bits:
             self.append_bit(False)
 
     def to_byte_array(self) -> bytearray:
-        return bytearray(int(byte) for byte in self.bytes)
+        return bytearray(map(lambda byte: byte.to_int(), self.bytes))
 
     @classmethod
     def from_byte_array(cls, _bytearray: bytearray) -> "Bits":
-        binints = [BinInt(byte, 8) for byte in _bytearray]
+        binints = map(lambda byte: BinInt(byte, 8), _bytearray)
         return cls(binints)
 
     def hex(self) -> str:

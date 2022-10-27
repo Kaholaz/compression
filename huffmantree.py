@@ -55,7 +55,7 @@ class HuffingTreeNode:
     def encodings(self) -> dict[str, BinInt]:
         def inner(root: HuffingTreeNode, code: BinInt) -> Iterator[tuple[str, BinInt]]:
             if root.letter is not None:
-                encoding = BinInt(int(code), len(code))
+                encoding = BinInt(code.to_int(), len(code))
                 code.rightshift()
                 yield root.letter, encoding
             else:
