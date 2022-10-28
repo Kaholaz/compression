@@ -20,7 +20,7 @@ class BinInt:
                 raise ValueError(
                     "A greater bit size is needed to represent this negative number"
                 )
-            ~self
+            self.__invert__()
             self.inc()
 
     def leftshiftonce(self):
@@ -95,7 +95,7 @@ class BinInt:
         return f"{self.__class__.__name__}(value={self.to_int()}, length={len(self)})"
 
     @classmethod
-    def from_tuple(cls, t: tuple[bool]) -> "BinInt":
+    def from_bits(cls, t: Iterator[bool]) -> "BinInt":
         result = cls(0)
         result.bits = deque(t)
 

@@ -38,9 +38,9 @@ def huffing_decode(string: bytearray) -> bytearray:
 
     bits = map(
         bool,
-        (string[0] & get_mask(0), string[0] & get_mask(1), string[0] & get_mask(2)),
+        (string[0] & get_mask(bit) for bit in range(3)),
     )
-    max_bin_length = BinInt.from_tuple(tuple(bits)).to_int()
+    max_bin_length = BinInt.from_bits(bits).to_int()
     max_count = (1 << max_bin_length) - 1
 
     byte = 0
@@ -54,7 +54,7 @@ def huffing_decode(string: bytearray) -> bytearray:
                 bit = 0
                 byte += 1
 
-        count = BinInt.from_tuple(tuple(map(bool, bits))).to_int()
+        count = BinInt.from_bits(map(bool, bits)).to_int()
         if count >= max_count:
             break
 
