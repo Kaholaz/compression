@@ -1,2 +1,10 @@
 .idea
 __pycache__
+
+# Test examples
+diverse.*
+*.pdf
+
+# Compressed and uncompressed files
+*.compressed
+*.uncompressed
