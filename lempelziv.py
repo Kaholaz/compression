@@ -13,7 +13,8 @@ class Search:
         self.to_search = to_search
 
     def match(self, pattern: bytearray, start_index: int) -> int:
-        if len(self.to_search) == 0: return -1
+        if len(self.to_search) == 0:
+            return -1
         start_index %= len(self.to_search)
         for i in range(start_index, len(self.to_search) - len(pattern) + 1):
             if i + len(pattern) >= len(self.to_search):
@@ -47,7 +48,7 @@ class History(deque[int]):
         min_length: int = 4,
         max_length: int = 255,
     ) -> tuple[int, int]:
-        best_match = (0, 1) # (Best match, letters to advance *or* letters in match)
+        best_match = (0, 1)  # (Best match, letters to advance *or* letters in match)
         try:
             pattern = text[start_index : start_index + min_length]
         except IndexError:
@@ -72,10 +73,10 @@ class History(deque[int]):
     def retrive(self, index: int, length: int) -> list[int]:
         index %= len(self)
         return list(islice(self, index, index + length))
-    
+
     def __str__(self) -> str:
         return super().__str__()
-    
+
     def __repr__(self) -> str:
         return super().__repr__()
 
@@ -124,7 +125,9 @@ def lempelziv_encode(text: bytearray | str) -> bytearray:
 
     unmatched = bytearray()
     i = 0
-    with tqdm(total=len(text), desc="Compressing file using lempelziv...") as loading_bar:
+    with tqdm(
+        total=len(text), desc="Compressing file using lempelziv..."
+    ) as loading_bar:
         while i < len(text):
             # Unmatched is full
             if len(unmatched) > max_history:

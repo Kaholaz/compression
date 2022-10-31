@@ -80,7 +80,7 @@ class BinInt:
     def to_int(self, signed: bool = False):
         if signed and self.get_bit(0):
             return self.value - (1 << self.number_of_bits)
-        return  self.value
+        return self.value
 
     def __lshift__(self, other: int) -> "BinInt":
         return self.__class__(self.value << other, self.number_of_bits + other)
