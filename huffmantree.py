@@ -17,7 +17,7 @@ class HuffingTreeNode:
 
     def add_encoding(self, value: "BinInt", letter: int):
         current = self
-        for choice in tuple(value):
+        for choice in value:
             if choice:
                 if current.right is None:
                     current.right = HuffingTreeNode(None, None, None, None)

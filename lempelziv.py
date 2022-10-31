@@ -1,6 +1,8 @@
 from collections import deque
 from itertools import islice
 
+from tqdm import tqdm
+
 from bitsandbytes import Bits, BinInt
 
 
@@ -45,7 +47,7 @@ class History(deque[int]):
         min_length: int = 4,
         max_length: int = 255,
     ) -> tuple[int, int]:
-        best_match = (0, 1)
+        best_match = (0, 1) # (Best match, letters to advance *or* letters in match)
         try:
             pattern = text[start_index : start_index + min_length]
         except IndexError:
@@ -122,26 +124,29 @@ def lempelziv_encode(text: bytearray | str) -> bytearray:
 
     unmatched = bytearray()
     i = 0
-    while i < len(text):
-        # Unmatched is full
-        if len(unmatched) > max_history:
-            out.append_bits(Block.from_unmatched_section(unmatched))
-            unmatched = bytearray()
-
-        # Find best match and react accordingly
-        best_match = history.find_best_match(text, i)
-        if best_match[0] == 0:
-            unmatched.append(text[i])
-        else:
-            if len(unmatched):
+    with tqdm(total=len(text), desc="Compressing file using lempelziv...") as loading_bar:
+        while i < len(text):
+            # Unmatched is full
+            if len(unmatched) > max_history:
                 out.append_bits(Block.from_unmatched_section(unmatched))
                 unmatched = bytearray()
-            out.append_bits(Block.from_matched_section(*best_match))
 
-        # Increment history and current index
-        for _ in range(best_match[1]):
-            history.append(text[i])
-            i += 1
+            # Find best match and react accordingly
+            best_match = history.find_best_match(text, i)
+            if best_match[0] == 0:
+                unmatched.append(text[i])
+            else:
+                if len(unmatched):
+                    out.append_bits(Block.from_unmatched_section(unmatched))
+                    unmatched = bytearray()
+                out.append_bits(Block.from_matched_section(*best_match))
+
+            # Increment history and current index
+            for _ in range(best_match[1]):
+                history.append(text[i])
+                i += 1
+
+            loading_bar.update(best_match[1])
 
     # Don't drop remaining unmatched
     if len(unmatched):
@@ -156,19 +161,13 @@ def lempelziv_decode(text: bytearray | str) -> bytearray:
     i = 0
     history = History(2 << 14 - 1)
     while i < len(text):
-        identifier = BinInt(text[i], 8)
-        identifier << 8
-        i += 1
-
-        for j, bit in enumerate(BinInt(text[i], 8)):
-            identifier.bits[8 + j] = bit
-        i += 1
+        identifier = BinInt((text[i] << 8) + text[i + 1], 16)
+        i += 2
 
         identifier_int = identifier.to_int(signed=True)
         if identifier_int < 0:
             length = text[i]
             i += 1
-
             new_text = history.retrive(identifier_int, length)
         elif identifier_int == 0:
             raise ValueError("Something is wrong with the text to decode!")

@@ -1,105 +1,112 @@
-from collections import deque
 from typing import Iterator, Optional
 
 
 class BinInt:
-    bits: deque[bool | int]
+    value: int
+    number_of_bits: int
 
-    def __init__(self, value: Optional[int] = None, length=-1):
-        self.bits = deque()
-        if value is not None:
-            bit_string = bin(abs(value))[2:]
-            for bit in bit_string:
-                self.bits.append(int(bit))
+    def __init__(self, value: Optional[int] = None, length=None):
+        if value is None:
+            value = 0
 
-        while len(self) < length:
-            self.bits.appendleft(False)
+        if length is None:
+            if value < 0:
+                raise ValueError("Length needs to be specified for negative values")
+            length = len(bin(value)) - 2
 
-        if value is not None and value < 0:
-            if self.bits[0]:
-                raise ValueError(
-                    "A greater bit size is needed to represent this negative number"
-                )
-            self.__invert__()
-            self.inc()
+        max_value = (1 << length) - 1
+        if abs(value) > max_value:
+            raise ValueError("Length is bit enough to represent the number")
+
+        self.value = value
+        self.number_of_bits = length
+        if value < 0:
+            bits = self.from_bits(bit for bit in self)
+            self.value = bits.value
+            self.number_of_bits = bits.number_of_bits
 
     def leftshiftonce(self):
-        self << 1
+        self.number_of_bits += 1
+        self.value <<= 1
 
     def rightshiftonce(self):
-        self >> 1
+        self.number_of_bits = max(self.number_of_bits - 1, 1)
+        self.value >>= 1
 
     def inc(self, signed: bool = False):
-        incremented = False
-        i = len(self) - 1
-
-        while not incremented and i >= 0:
-            incremented = not self.bits[i]
-            self.bits[i] = incremented
-            i -= 1
-
-        if not incremented and not signed:
-            self.bits.appendleft(True)
+        self.value += 1
+        if self.value >= 1 << self.number_of_bits:
+            self.number_of_bits += 1
 
     def hex(self) -> str:
         return hex(self.to_int())[2:]
 
+    def get_bit(self, bit_number):
+        bit_value = 1 << (self.number_of_bits - bit_number - 1)
+        return bool(bit_value & self.value)
+
+    def set_bit(self, bit_number: int, value: bool):
+        current_bit = self.get_bit(bit_number)
+        bit_value = 1 << (self.number_of_bits - bit_number - 1)
+        if current_bit and not value:
+            self.value -= bit_value
+        if not current_bit and value:
+            self.value += bit_value
+
     def __copy__(self):
-        out = BinInt()
-        out.bits = self.bits.copy()
+        out = BinInt(self.value, self.number_of_bits)
         return out
 
     def __tuple__(self):
-        return tuple(self.bits)
+        return tuple(bit for bit in self)
+
+    def __iter__(self) -> Iterator[bool]:
+        factor = 1 << (self.number_of_bits - 1)
+        if self.value < 0:
+            yield True
+            total = -factor
+            factor >>= 1
+        else:
+            total = 0
+
+        while factor > 0:
+            if (new_total := total + factor) > self.value:
+                yield False
+            else:
+                yield True
+                total = new_total
+            factor >>= 1
 
     def to_int(self, signed: bool = False):
-        if len(self) == 0:
-            return 0
-        if len(self) == 1:
-            return self.bits[0]
+        if signed and self.get_bit(0):
+            return self.value - (1 << self.number_of_bits)
+        return  self.value
 
-        factor = 2 << len(self) - 2
+    def __lshift__(self, other: int) -> "BinInt":
+        return self.__class__(self.value << other, self.number_of_bits + other)
 
-        i = 0
-        total = factor * self.bits[0] if not signed else -factor * self.bits[0]
-        while factor > 1:
-            i += 1
-            factor >>= 1
-            total += factor * self.bits[i]
-        return total
+    def __rshift__(self, other: int) -> "BinInt":
+        return self.__class__(self.value >> other, self.number_of_bits - other)
 
-    def __lshift__(self, other: int):
-        for _ in range(other):
-            self.bits.append(False)
-        return self
-
-    def __rshift__(self, other: int):
-        for _ in range(other):
-            if not len(self):
-                break
-            self.bits.pop()
-
-        return self
-
-    def __invert__(self):
-        self.bits = deque(map(lambda b: not b, self.bits))
+    def __invert__(self) -> "BinInt":
+        return self.__class__.from_bits(not bit for bit in self)
 
     def __len__(self):
-        return len(self.bits)
-
-    def __iter__(self):
-        for bit in self.bits:
-            yield bit
+        return self.number_of_bits
 
     def __repr__(self):
         return f"{self.__class__.__name__}(value={self.to_int()}, length={len(self)})"
 
     @classmethod
     def from_bits(cls, t: Iterator[bool]) -> "BinInt":
-        result = cls(0)
-        result.bits = deque(t)
+        value = 0
+        length = 0
+        for bit in t:
+            value <<= 1
+            length += 1
+            value += bit
 
-        return result
+        return cls(value, length)
 
 
 class Bits:
@@ -123,7 +130,7 @@ class Bits:
             self.bytes.append(BinInt(0, 8))
             self.bit_pointer = 0
 
-        self.bytes[-1].bits[self.bit_pointer] = boolean
+        self.bytes[-1].set_bit(self.bit_pointer, boolean)
 
         self.bit_pointer += 1
 
@@ -148,8 +155,8 @@ class Bits:
 
     def __iter__(self) -> Iterator[bool]:
         for byte in self.bytes:
-            for bit_pointer in range(8):
-                yield byte.bits[bit_pointer]
+            for bit in byte:
+                yield bit
 
 
 def get_mask(bit: int) -> int:

@@ -15,7 +15,7 @@ def huffing_encode(string: bytearray | str) -> bytearray:
 
     max_bin_length = len(bin(max(lengths) + 1)) - 2
     out = Bits()
-    out.append_binint(BinInt(max_bin_length, 3))
+    out.append_binint(BinInt(max_bin_length, 4))
     for length in lengths:
         out.append_binint(BinInt(length, max_bin_length))
     out.append_binint(BinInt((1 << max_bin_length) - 1, max_bin_length))
@@ -38,13 +38,13 @@ def huffing_decode(string: bytearray) -> bytearray:
 
     bits = map(
         bool,
-        (string[0] & get_mask(bit) for bit in range(3)),
+        (string[0] & get_mask(bit) for bit in range(4)),
     )
     max_bin_length = BinInt.from_bits(bits).to_int()
     max_count = (1 << max_bin_length) - 1
 
     byte = 0
-    bit = 3
+    bit = 4
     while True:
         bits = list()
         for _ in range(max_bin_length):
