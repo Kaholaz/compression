@@ -6,10 +6,12 @@ from tqdm import tqdm
 from bitsandbytes import Bits, BinInt
 
 class SearchPattern:
-    _pattern: bytearray = None
+    _pattern: bytearray
+    _last_chars: list[int]
     bad_chars_array: list[list[int]]
     
     def __init__(self, pattern: bytearray) -> None:
+        self._pattern = list()
         self.pattern = pattern
 
     @property
@@ -19,38 +21,31 @@ class SearchPattern:
     @pattern.setter
     def pattern(self, pattern: bytearray):
         if (
-            self.pattern is None
+            not len(self.pattern)
             or not len(self.pattern) < len(pattern)
             or pattern[: len(self.pattern)] != self.pattern
-        ):
-            self.bad_chars_array = self.construct_bad_chars_array(pattern)
+        ):  
+            self.reset_bad_chars_array()
+            new_chars = pattern
         else:
-            self.append_bad_chars_array(
-                self.bad_chars_array, pattern[len(self.pattern) :]
-            )
-        self._pattern = pattern[:]
+            new_chars = pattern[len(self.pattern) :]
+        
+        for new_char in new_chars:
+            self.append_pattern(new_char)
 
     def append_pattern(self, value: int):
+        self._last_chars[value] = len(self._pattern)
+        for latest_char, index_of_char_in_pattern in enumerate(self._last_chars):
+            self.bad_chars_array[latest_char].append(index_of_char_in_pattern)
+
         self.pattern.append(value)
-        self.append_bad_chars_array(self.bad_chars_array, bytearray((value,)))
 
-    @classmethod
-    def construct_bad_chars_array(cls, pattern: bytearray) -> list[list[int]]:
-        result = [[-1] for _ in range(256)]
-        return cls.append_bad_chars_array(result, pattern)
+    def reset_bad_chars_array(self):
+        self._last_chars = [-1] * 256
+        self.bad_chars_array = [[-1] for _ in range(256)]
 
-    @staticmethod
-    def append_bad_chars_array(
-        old_bad_chars_array: list[list[int]], new_letters: bytearray
-    ) -> list[list[int]]:
-        result = old_bad_chars_array
-        last_char = [last_index[-1] for last_index in old_bad_chars_array]
-        for i, char in enumerate(new_letters):
-            last_char[char] = i
-            for latest_char, index_of_char_in_pattern in enumerate(last_char):
-                result[latest_char].append(index_of_char_in_pattern)
-
-        return result
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(pattern={self.pattern})"
 
     def __len__(self):
         return len(self.pattern)
@@ -87,7 +82,7 @@ class History(deque[int]):
             if pattern_index == -1:
                 return start
             
-            start += 1
+            start += pattern_index - pattern.bad_chars_array[self[text_index]][pattern_index]
         return -1
 
     def find_best_match(
@@ -235,4 +230,4 @@ def lempelziv_decode(text: bytearray | str) -> bytearray:
 
 
 if __name__ == "__main__":
-    print(lempelziv_decode(lempelziv_encode("undrende dundrende plundrende")))
+    print(lempelziv_encode("undrende dundrende plundrende"))

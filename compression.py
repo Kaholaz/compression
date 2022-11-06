@@ -72,6 +72,7 @@ def hard():
         "diverse.txt",
         "diverse.lyx",
         "opg8-kompr.pdf",
+        "diverse.pdf"
     ]
 
     for file in files:
@@ -80,5 +81,6 @@ def hard():
 
 
 if __name__ == "__main__":
-    encode_file("diverse.lyx")
-    decode_file("diverse.lyx.compressed")
+    hard()
+    # encode_file("diverse.lyx")
+    # decode_file("diverse.lyx.compressed")
