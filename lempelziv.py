@@ -5,41 +5,90 @@ from tqdm import tqdm
 
 from bitsandbytes import Bits, BinInt
 
+class SearchPattern:
+    _pattern: bytearray = None
+    bad_chars_array: list[list[int]]
+    
+    def __init__(self, pattern: bytearray) -> None:
+        self.pattern = pattern
 
-class Search:
-    to_search: deque[int]
+    @property
+    def pattern(self) -> bytearray:
+        return self._pattern
 
-    def __init__(self, to_search: deque[int]):
-        self.to_search = to_search
+    @pattern.setter
+    def pattern(self, pattern: bytearray):
+        if (
+            self.pattern is None
+            or not len(self.pattern) < len(pattern)
+            or pattern[: len(self.pattern)] != self.pattern
+        ):
+            self.bad_chars_array = self.construct_bad_chars_array(pattern)
+        else:
+            self.append_bad_chars_array(
+                self.bad_chars_array, pattern[len(self.pattern) :]
+            )
+        self._pattern = pattern[:]
 
-    def match(self, pattern: bytearray, start_index: int) -> int:
-        if len(self.to_search) == 0:
-            return -1
-        start_index %= len(self.to_search)
-        for i in range(start_index, len(self.to_search) - len(pattern) + 1):
-            if i + len(pattern) >= len(self.to_search):
-                break
-            for j in range(len(pattern)):
-                if pattern[j] != self.to_search[i + j]:
-                    break
-            else:
-                return i
-        return -1
+    def append_pattern(self, value: int):
+        self.pattern.append(value)
+        self.append_bad_chars_array(self.bad_chars_array, bytearray((value,)))
+
+    @classmethod
+    def construct_bad_chars_array(cls, pattern: bytearray) -> list[list[int]]:
+        result = [[-1] for _ in range(256)]
+        return cls.append_bad_chars_array(result, pattern)
+
+    @staticmethod
+    def append_bad_chars_array(
+        old_bad_chars_array: list[list[int]], new_letters: bytearray
+    ) -> list[list[int]]:
+        result = old_bad_chars_array
+        last_char = [last_index[-1] for last_index in old_bad_chars_array]
+        for i, char in enumerate(new_letters):
+            last_char[char] = i
+            for latest_char, index_of_char_in_pattern in enumerate(last_char):
+                result[latest_char].append(index_of_char_in_pattern)
+
+        return result
+
+    def __len__(self):
+        return len(self.pattern)
 
 
 class History(deque[int]):
-    search: Search
     size: int
 
     def __init__(self, size: int):
         super().__init__()
         self.size = size
-        self.search = Search(self)
 
     def append(self, __x: int) -> None:
         super().append(__x)
         if len(self) > self.size:
             self.popleft()
+
+    def next_match(self, pattern: SearchPattern, start_index: int) -> int:
+        if len(self) == 0:
+            return -1
+        start_index %= len(self)
+        latest_start = len(self) - len(pattern._pattern) 
+
+        start = start_index
+        while start <= latest_start:
+
+            # Search
+            pattern_index = len(pattern._pattern) - 1
+            text_index = start + pattern_index
+            while pattern_index >= 0 and pattern._pattern[pattern_index] == self[text_index]:
+                pattern_index -= 1
+                text_index -= 1
+
+            if pattern_index == -1:
+                return start
+            
+            start += 1
+        return -1
 
     def find_best_match(
         self,
@@ -50,21 +99,21 @@ class History(deque[int]):
     ) -> tuple[int, int]:
         best_match = (0, 1)  # (Best match, letters to advance *or* letters in match)
         try:
-            pattern = text[start_index : start_index + min_length]
+            pattern = SearchPattern(text[start_index : start_index + min_length])
         except IndexError:
             return best_match
 
         while True:
-            found = self.search.match(pattern, best_match[0])
+            found = self.next_match(pattern, best_match[0])
             if found == -1:  # No match
                 break
 
-            best_match = (found - len(self), len(pattern))
+            best_match = (found - len(self), len(pattern._pattern))
             if best_match[1] >= max_length:
                 break
 
             try:
-                pattern.append(text[start_index + len(pattern)])
+                pattern.append_pattern(text[start_index + len(pattern._pattern)])
             except IndexError:
                 break
 
@@ -163,7 +212,7 @@ def lempelziv_decode(text: bytearray | str) -> bytearray:
 
     i = 0
     history = History(2 << 14 - 1)
-    while i < len(text):
+    while i < len(text) - 1:
         identifier = BinInt((text[i] << 8) + text[i + 1], 16)
         i += 2
 

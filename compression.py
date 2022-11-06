@@ -62,16 +62,16 @@ def easy():
     """
 
     print(text := bytearray(text, "utf-8"))
-    print(encoded := encode(text))
-    print(decoded := decode(encoded))
+    print(encoded := lempelziv_encode(text))
+    print(decoded := lempelziv_decode(encoded))
     assert decoded == text
 
 
 def hard():
     files = [
-        "opg8-kompr.pdf",
         "diverse.txt",
         "diverse.lyx",
+        "opg8-kompr.pdf",
     ]
 
     for file in files:
@@ -80,4 +80,5 @@ def hard():
 
 
 if __name__ == "__main__":
-    hard()
+    encode_file("diverse.lyx")
+    decode_file("diverse.lyx.compressed")
