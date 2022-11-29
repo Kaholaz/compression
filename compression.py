@@ -76,11 +76,11 @@ def hard():
     ]
 
     for file in files:
+        print(f"Encoding file '{file}'")
         encode_file(file)
+        print(f"Decoding file '{file}.compressed'")
         decode_and_write_file(file + ".compressed")
 
 
 if __name__ == "__main__":
     hard()
-    # encode_file("diverse.lyx")
-    # decode_file("diverse.lyx.compressed")

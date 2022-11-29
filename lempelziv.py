@@ -1,8 +1,6 @@
 from collections import deque
 from itertools import islice
 
-from tqdm import tqdm
-
 from bitsandbytes import Bits, BinInt
 
 class SearchPattern:
@@ -169,31 +167,26 @@ def lempelziv_encode(text: bytearray | str) -> bytearray:
 
     unmatched = bytearray()
     i = 0
-    with tqdm(
-        total=len(text), desc="Compressing file using lempelziv..."
-    ) as loading_bar:
-        while i < len(text):
-            # Unmatched is full
-            if len(unmatched) > max_history:
+    while i < len(text):
+        # Unmatched is full
+        if len(unmatched) > max_history:
+            out.append_bits(Block.from_unmatched_section(unmatched))
+            unmatched = bytearray()
+
+        # Find best match and react accordingly
+        best_match = history.find_best_match(text, i)
+        if best_match[0] == 0:
+            unmatched.append(text[i])
+        else:
+            if len(unmatched):
                 out.append_bits(Block.from_unmatched_section(unmatched))
                 unmatched = bytearray()
+            out.append_bits(Block.from_matched_section(*best_match))
 
-            # Find best match and react accordingly
-            best_match = history.find_best_match(text, i)
-            if best_match[0] == 0:
-                unmatched.append(text[i])
-            else:
-                if len(unmatched):
-                    out.append_bits(Block.from_unmatched_section(unmatched))
-                    unmatched = bytearray()
-                out.append_bits(Block.from_matched_section(*best_match))
-
-            # Increment history and current index
-            for _ in range(best_match[1]):
-                history.append(text[i])
-                i += 1
-
-            loading_bar.update(best_match[1])
+        # Increment history and current index
+        for _ in range(best_match[1]):
+            history.append(text[i])
+            i += 1
 
     # Don't drop remaining unmatched
     if len(unmatched):
